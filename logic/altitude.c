@@ -51,6 +51,10 @@
 #include "ports.h"
 #include "timer.h"
 
+#ifdef CONFIG_FERTITO_VARIO
+#include "buzzer.h"
+#endif
+
 // logic
 #include "user.h"
 
@@ -91,7 +95,15 @@ void reset_altitude_measurement(void)
 	
 	// Set default altitude value
 	sAlt.altitude		= 0;
-	
+
+#ifdef CONFIG_FERTITO_VARIO
+	sAlt.Daltitude		= 0;
+	sAlt.Oaltitude		= 0;
+	sAlt.Vario		= 0;
+
+        reset_buzzer();
+#endif
+
 	// Pressure sensor ok?
 	if (ps_ok)
 	{
@@ -108,6 +120,9 @@ void reset_altitude_measurement(void)
 			sAlt.altitude += sAlt.altitude_offset;
 			update_pressure_table(sAlt.altitude, sAlt.pressure, sAlt.temperature);
 		}
+#ifdef CONFIG_FERTITO_VARIO
+                sAlt.Oaltitude=sAlt.Daltitude;
+#endif
 	}
 }
 
@@ -174,12 +189,30 @@ void start_altitude_measurement(void)
 		// Start pressure sensor
 		ps_start(); 
 
+#ifndef CONFIG_FERTITO_VARIO
 		// Set timeout counter only if sensor status was OK
 		sAlt.timeout = ALTITUDE_MEASUREMENT_TIMEOUT;
+#else
+		switch (sAlt.view_style)
+		{
+			case DISPLAY_ALTI:
+				// Set timeout counter only if sensor status was OK
+				sAlt.timeout = ALTITUDE_MEASUREMENT_TIMEOUT;
+				break;
+			case DISPLAY_VARIO:
+				// Set timeout counter only if sensor status was OK
+				sAlt.timeout = VARIO_MEASUREMENT_TIMEOUT;
+				break;
+		}
+#endif /* CONFIG_FERTITO_VARIO */
 
 		// Get updated altitude
 		while((PS_INT_IN & PS_INT_PIN) == 0); 
+#ifdef CONFIG_FERTITO_VARIO
+		do_altitude_measurement(FILTER_ON);
+#else
 		do_altitude_measurement(FILTER_OFF);
+#endif
 	}
 }
 
@@ -235,14 +268,20 @@ void do_altitude_measurement(u8 filter)
 	else
 	{
 		// Filter current pressure
+#ifndef CONFIG_FERTITO_VARIO
 		pressure = (u32)((pressure * 0.2) + (sAlt.pressure * 0.8));
-	
+#else
+                pressure = (u32)((pressure * 0.6) + (sAlt.pressure * 0.4));
+#endif
 		// Store average pressure
 		sAlt.pressure = pressure;
 	}
-	
-	// Convert pressure (Pa) and temperature (?K) to altitude (m)
+        // Convert pressure (Pa) and temperature (?K) to altitude (m)
 	sAlt.altitude = conv_pa_to_meter(sAlt.pressure, sAlt.temperature);
+
+#ifdef CONFIG_FERTITO_VARIO
+	sAlt.Daltitude=10*sAlt.altitude;
+#endif /* CONFIG_FERTITO_VARIO */
 }
 
 
@@ -255,7 +294,9 @@ void do_altitude_measurement(u8 filter)
 void sx_altitude(u8 line)
 {
 	// Function can be empty
-	
+#ifdef CONFIG_FERTITO_VARIO
+        if (++sAlt.view_style > 1) sAlt.view_style = 0;
+#endif
 	// Restarting of altitude measurement will be done by subsequent full display update 
 }
 
@@ -273,6 +314,12 @@ void mx_altitude(u8 line)
 
 	// Clear display
 	clear_display_all();
+
+#ifdef CONFIG_FERTITO_VARIO
+	// init for vario
+	sAlt.Oaltitude=sAlt.Daltitude;
+	sAlt.Vario=0;
+#endif
 
 	// Set lower and upper limits for offset correction
 #ifdef CONFIG_METRIC_ONLY
@@ -393,6 +440,8 @@ void display_altitude(u8 line, u8 update)
 			if (sys.flag.use_metric_units)
 			{
 #endif
+
+#ifndef CONFIG_FERTITO_VARIO
 				// Display altitude in xxxx m format, allow 3 leading blank digits
 				if (sAlt.altitude >= 0)
 				{
@@ -434,6 +483,116 @@ void display_altitude(u8 line, u8 update)
 			display_chars(LCD_SEG_L1_3_0, str, SEG_ON);
 		}
 	}
+#else
+        {
+          switch (sAlt.view_style)
+            {
+            case DISPLAY_ALTI:  	
+              str = itoa(sAlt.altitude, 4, 3);
+              display_symbol(LCD_SEG_L1_DP0, SEG_OFF);
+              display_symbol(LCD_SYMB_ARROW_UP, SEG_ON);
+              display_symbol(LCD_SYMB_ARROW_DOWN, SEG_OFF);
+#ifndef CONFIG_METRIC_ONLY
+              if (sys.flag.use_metric_units)
+                {
+#endif
+                  // Display altitude in xxxx m format, allow 3 leading blank digits
+                  if (sAlt.altitude >= 0)
+                    {
+                      str = itoa(sAlt.altitude, 4, 3);
+                      display_symbol(LCD_SYMB_ARROW_UP, SEG_ON);
+                      display_symbol(LCD_SYMB_ARROW_DOWN, SEG_OFF);
+                    }
+                  else
+                    {
+                      str = itoa(sAlt.altitude*(-1), 4, 3);
+                      display_symbol(LCD_SYMB_ARROW_UP, SEG_OFF);
+                      display_symbol(LCD_SYMB_ARROW_DOWN, SEG_ON);
+                    }
+#ifndef CONFIG_METRIC_ONLY
+
+                }
+              else
+                {
+                  // Convert from meters to feet
+                  ft = convert_m_to_ft(sAlt.altitude);
+												
+                  // Limit to 9999ft (3047m)
+                  if (ft > 9999) ft = 9999;
+												
+                  // Display altitude in xxxx ft format, allow 3 leading blank digits
+                  if (ft >= 0)
+                    {
+                      str = itoa(ft, 4, 3);
+                      display_symbol(LCD_SYMB_ARROW_UP, SEG_ON);
+                      display_symbol(LCD_SYMB_ARROW_DOWN, SEG_OFF);
+                    }
+                  else
+                    {
+                      str = itoa(ft*(-1), 4, 3);
+                      display_symbol(LCD_SYMB_ARROW_UP, SEG_OFF);
+                      display_symbol(LCD_SYMB_ARROW_DOWN, SEG_ON);
+                    }				
+                }
+#endif /* CONFIG_METRIC_ONLY */
+              //sAlt.Oaltitude=sAlt.Daltitude;
+              display_chars(LCD_SEG_L1_3_0, str, SEG_ON);
+              break;
+            case DISPLAY_VARIO: 	sAlt.Vario=(sAlt.Daltitude-sAlt.Oaltitude);
+              if(sAlt.Vario > 100)
+                {
+                  sBuzzer.steps=1;
+                  start_buzzer(5, BUZZER_ON_TICKS, BUZZER_OFF_TICKS);
+                }
+              else if(sAlt.Vario > 10)
+                {
+                  str = itoa(sAlt.Vario, 4, 3);
+                  display_symbol(LCD_SYMB_ARROW_UP, SEG_ON);
+                  display_symbol(LCD_SYMB_ARROW_DOWN, SEG_OFF);
+                  sAlt.NbBeep=(u8)(sAlt.Vario/10);
+                  sBuzzer.steps=11-sAlt.NbBeep;
+                  start_buzzer(sAlt.NbBeep, BUZZER_ON_TICKS, BUZZER_OFF_TICKS);
+                }
+              else if(sAlt.Vario < -10)
+                {
+                  str = itoa(sAlt.Vario*(-1), 4, 3);
+                  display_symbol(LCD_SYMB_ARROW_UP, SEG_OFF);
+                  display_symbol(LCD_SYMB_ARROW_DOWN, SEG_ON);
+                  //sAlt.NbBeep=(u8)(sAlt.Vario/-10);
+                  //start_buzzer(sAlt.NbBeep, BUZZER_ON_TICKS, BUZZER_OFF_TICKS);
+                }
+              else if(sAlt.Vario > 0)
+                {
+                  str = itoa(sAlt.Vario, 4, 3);
+                  display_symbol(LCD_SYMB_ARROW_UP, SEG_ON);
+                  display_symbol(LCD_SYMB_ARROW_DOWN, SEG_OFF);
+                  sAlt.NbBeep=(u8)(sAlt.Vario);
+                  sBuzzer.steps=11-sAlt.NbBeep;
+                  start_buzzer(1, BUZZER_ON_TICKS, BUZZER_OFF_TICKS);
+                }
+              else
+                {
+                  str = itoa(sAlt.Vario*(-1), 4, 3);
+                  display_symbol(LCD_SYMB_ARROW_UP, SEG_OFF);
+                  display_symbol(LCD_SYMB_ARROW_DOWN, SEG_ON);
+                  //sAlt.NbBeep=(u8)(sAlt.Vario/-1);
+                  //start_buzzer(1, BUZZER_ON_TICKS, BUZZER_OFF_TICKS);
+                }
+              //start_buzzer(sAlt.Vario, BUZZER_ON_TICKS, BUZZER_OFF_TICKS);
+              sAlt.Oaltitude=sAlt.Daltitude;
+              display_chars(LCD_SEG_L1_3_0, str, SEG_ON);
+              display_symbol(LCD_SEG_L1_DP0, SEG_ON);
+              break;
+            default: 				/*str = itoa(sAlt.altitude, 4, 3);
+                                                  display_symbol(LCD_SYMB_ARROW_UP, SEG_ON);
+                                                  display_symbol(LCD_SYMB_ARROW_DOWN, SEG_OFF);*/
+              break;
+            }
+				
+        }
+    }
+}
+#endif /* CONFIG_FERTITO_VARIO */
 	else if (update == DISPLAY_LINE_CLEAR)
 	{
 		// Disable pressure measurement
@@ -442,6 +601,9 @@ void display_altitude(u8 line, u8 update)
 		// Stop measurement
 		stop_altitude_measurement();
 		
+#ifdef CONFIG_FERTITO_VARIO
+                stop_buzzer();
+#endif
 		// Clean up function-specific segments before leaving function
 		display_symbol(LCD_UNIT_L1_M, SEG_OFF);
 		display_symbol(LCD_UNIT_L1_FT, SEG_OFF);

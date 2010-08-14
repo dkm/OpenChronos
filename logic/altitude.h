@@ -61,6 +61,11 @@ extern void display_altitude(u8 line, u8 update);
 // Stop altitude measurement after 60 minutes to save battery
 #define ALTITUDE_MEASUREMENT_TIMEOUT	(60*60u)
 
+#ifdef CONFIG_FERTITO_VARIO
+#define DISPLAY_ALTI		(0u)
+#define DISPLAY_VARIO		(1u)
+#define VARIO_MEASUREMENT_TIMEOUT	(6000*60u)
+#endif
 
 // *************************************************************************************************
 // Global Variable section
@@ -80,6 +85,23 @@ struct alt
 	
 	// Altitude offset stored during calibration
 	s16		altitude_offset;
+
+#ifdef CONFIG_FERTITO_VARIO
+	// Altitude (m)
+	s16		Daltitude;
+	
+	//Old Altitude (m)
+	s16		Oaltitude;
+	
+	// Vario (m)
+	s8		Vario;
+	
+	// Number of Beep
+	u8 		NbBeep;
+	
+	// Display Alt/Vario values	
+	u8 			view_style;
+#endif /* CONFIG_FERTITO_VARIO */
 
 	// Timeout
 	u16		timeout;
