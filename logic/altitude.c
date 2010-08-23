@@ -276,11 +276,15 @@ void do_altitude_measurement(u8 filter)
 		// Store average pressure
 		sAlt.pressure = pressure;
 	}
+
+
         // Convert pressure (Pa) and temperature (?K) to altitude (m)
-	sAlt.altitude = conv_pa_to_meter(sAlt.pressure, sAlt.temperature);
 
 #ifdef CONFIG_FERTITO_VARIO
-	sAlt.Daltitude=10*sAlt.altitude;
+	sAlt.Daltitude = conv_pa_to_decimeter(sAlt.pressure, sAlt.temperature);
+	sAlt.altitude=(s16)(sAlt.Daltitude/10);
+#else
+	sAlt.altitude = conv_pa_to_meter(sAlt.pressure, sAlt.temperature);
 #endif /* CONFIG_FERTITO_VARIO */
 }
 
