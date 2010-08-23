@@ -50,6 +50,7 @@ extern u16 ps_get_temp(void);
 extern void init_pressure_table(void);
 extern void update_pressure_table(s16 href, u32 p_meas, u16 t_meas);
 extern s16 conv_pa_to_meter(u32 p_meas, u16 t_meas);
+extern s16 conv_pa_to_decimeter(u32 p_meas, u16 t_meas);
 
 
 // *************************************************************************************************

@@ -498,16 +498,8 @@ void update_pressure_table(s16 href, u32 p_meas, u16 t_meas)
 }
 
 
-// *************************************************************************************************
-// @fn          conv_pa_to_meter
-// @brief       Convert pressure (Pa) to altitude (m) using a conversion table
-//				Implemented straight from VTI reference code.
-// @param       u32		p_meas	Pressure (Pa)
-//				u16		t_meas	Temperature (10*°K)
-// @return      s16				Altitude (m)
-// *************************************************************************************************
-s16 conv_pa_to_meter(u32 p_meas, u16 t_meas)
-{
+
+static float conv_pa_to_alti(u32 p_meas, u16 t_meas) {
 	const float coef2  = 0.0007;
 	const float Invt00 = 0.003470415;
 	volatile float hnoll;
@@ -547,6 +539,35 @@ s16 conv_pa_to_meter(u32 p_meas, u16 t_meas)
 	// Compensate temperature error
 	t0 = fl_t_meas/(1 - hnoll*Invt00*0.0065);
 	fl_h = Invt00*t0*hnoll;
+	return (fl_h);
+}
+
+// *************************************************************************************************
+// @fn          conv_pa_to_meter
+// @brief       Convert pressure (Pa) to altitude (m) using a conversion table
+//				Implemented straight from VTI reference code.
+// @param       u32		p_meas	Pressure (Pa)
+//				u16		t_meas	Temperature (10*°K)
+// @return      s16				Altitude (m)
+// *************************************************************************************************
+s16 conv_pa_to_meter(u32 p_meas, u16 t_meas)
+{
+	volatile float fl_h;
+	volatile s16 h;
+
+        fl_h = conv_pa_to_alti(p_meas, t_meas);
+	h = (u16)fl_h;
+	
+	return (h);
+}
+
+
+s16 conv_pa_to_decimeter(u32 p_meas, u16 t_meas)
+{
+	volatile float fl_h;
+	volatile s16 h;
+
+        fl_h = 10*conv_pa_to_alti(p_meas, t_meas);
 	h = (u16)fl_h;
 	
 	return (h);
